@@ -1,10 +1,12 @@
 // -----------------------------------
 // Controlling LEDs over the Internet
 // -----------------------------------
-
+#include "PietteTech_DHT.h"
 // First, let's create our "shorthand" for the pins
 // Same as in the Blink an LED example:
 // led1 is D0, led2 is D7
+
+#define DHT_DATA_PIN		D1
 
 int led1 = D0;
 int led2 = D7;
@@ -13,8 +15,24 @@ int mode = 0;
 
 int uptime = 0;
 
+
+PietteTech_DHT* s_dht = NULL;
+
+static float s_temperature = 0;
+static float s_humidity = 0;
+static int s_temp = 0;
+static int s_hum = 0;
+
 // Last time, we only needed to declare pins in the setup function.
 // This time, we are also going to register our Spark function
+
+void dht_wrapper()
+{
+    s_dht->isrCallback();
+}
+
+static void init_devices();
+static void temp_humidity_loop();
 
 void setup()
 {
@@ -24,14 +42,19 @@ void setup()
    pinMode(led2, OUTPUT);
 
    // We are also going to declare a Spark.function so that we can turn the LED on and off from the cloud.
-   Spark.function("led",ledToggle);
-   Spark.variable("uptime",&uptime, INT); // https://docs.particle.io/reference/firmware/core/#particle-publish-
+   Particle.function("led",ledToggle);
+   Particle.variable("uptime",&uptime, INT); // https://docs.particle.io/reference/firmware/core/#particle-publish-
    // This is saying that when we ask the cloud for the function "led", it will employ the function ledToggle() from this app.
+
+	Particle.variable("temperature", &s_temp, INT);
+	Particle.variable("humidity", &s_hum, INT);
 
    // For good measure, let's also make sure both LEDs are off when we start:
    digitalWrite(led1, LOW);
    digitalWrite(led2, LOW);
 
+
+	init_devices();
 }
 
 
@@ -72,9 +95,14 @@ void loop()
     uptime = millis() / 1000;
     if (uptime % 60 == 0)
     {
-        Particle.publish("alive", String(uptime), 60); // https://console.particle.io/events
+        Particle.publish("alive", String(uptime), 20); // https://console.particle.io/events
+	Particle.publish("temperature", String(s_temperature), 20);
+	Particle.publish("humidity", String(s_humidity), 20);
         delay(1000);
     }
+
+    temp_humidity_loop();
+    delay(1000);
    // Nothing to do here
 }
 
@@ -113,3 +141,54 @@ int ledToggle(String command) {
     return mode;
 }
 
+static void init_devices()
+{
+	s_dht = new PietteTech_DHT(DHT_DATA_PIN, DHT22, dht_wrapper);
+}
+
+static void temp_humidity_loop()
+{
+	int result = s_dht->acquireAndWait(2000);
+
+	if (result != DHTLIB_OK)
+	{
+		delete s_dht;
+		s_dht = new PietteTech_DHT(DHT_DATA_PIN, DHT22, dht_wrapper);
+		switch (result)
+		{
+			case DHTLIB_OK:
+				Serial.println("OK");
+				break;
+			case DHTLIB_ERROR_CHECKSUM:
+				Serial.println("Error\n\r\tChecksum error");
+				break;
+			case DHTLIB_ERROR_ISR_TIMEOUT:
+				Serial.println("Error\n\r\tISR time out error");
+				break;
+			case DHTLIB_ERROR_RESPONSE_TIMEOUT:
+				Serial.println("Error\n\r\tResponse time out error");
+				break;
+			case DHTLIB_ERROR_DATA_TIMEOUT:
+				Serial.println("Error\n\r\tData time out error");
+				break;
+			case DHTLIB_ERROR_ACQUIRING:
+				Serial.println("Error\n\r\tAcquiring");
+				break;
+			case DHTLIB_ERROR_DELTA:
+				Serial.println("Error\n\r\tDelta time too small");
+				break;
+			case DHTLIB_ERROR_NOTSTARTED:
+				Serial.println("Error\n\r\tNot started");
+				break;
+			default:
+				Serial.println("Unknown error");
+				break;
+		}
+		return;
+	}
+
+	s_temperature = s_dht->getCelsius();
+	s_humidity = s_dht->getHumidity();
+	s_temp = (int)s_temperature;
+	s_hum = (int)s_humidity;
+}

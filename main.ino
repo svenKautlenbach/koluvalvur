@@ -17,11 +17,17 @@ int uptime = 0;
 
 
 PietteTech_DHT* s_dht = NULL;
+PietteTech_DHT* s_dhtIn = NULL;
 
 static float s_temperature = 0;
 static float s_humidity = 0;
 static int s_temp = 0;
 static int s_hum = 0;
+
+static float s_tempIn = 0;
+static float s_humIn = 0;
+static int s_tempIntIn = 0;
+static int s_humIntIn = 0;
 
 // Last time, we only needed to declare pins in the setup function.
 // This time, we are also going to register our Spark function
@@ -29,6 +35,11 @@ static int s_hum = 0;
 void dht_wrapper()
 {
     s_dht->isrCallback();
+}
+
+void dhtIn_isr()
+{
+	s_dhtIn->isrCallback();
 }
 
 static void init_devices();
@@ -46,8 +57,11 @@ void setup()
    Particle.variable("uptime",&uptime, INT); // https://docs.particle.io/reference/firmware/core/#particle-publish-
    // This is saying that when we ask the cloud for the function "led", it will employ the function ledToggle() from this app.
 
-	Particle.variable("temperature", &s_temp, INT);
-	Particle.variable("humidity", &s_hum, INT);
+	Particle.variable("temp_out", &s_temp, INT);
+	Particle.variable("hum_out", &s_hum, INT);
+
+	Particle.variable("temp_in", &s_tempIntIn, INT);
+	Particle.variable("hum_in", &s_humIntIn, INT);
 
    // For good measure, let's also make sure both LEDs are off when we start:
    digitalWrite(led1, LOW);
@@ -73,35 +87,24 @@ void loop()
     {
         digitalWrite(led1, HIGH);
         digitalWrite(led2, HIGH);
-        delay(1000);
-        digitalWrite(led1, LOW);
-        digitalWrite(led2, LOW);
-        delay(1000);
-    }
-    else if (mode == 2)
-    {
-        digitalWrite(led1, HIGH);
-        digitalWrite(led2, LOW);
-        delay(300);
-        digitalWrite(led1, LOW);
-        digitalWrite(led2, HIGH);
-        delay(300);
-    }
-    else
-    {
-        digitalWrite(led1, HIGH);
-        digitalWrite(led2, HIGH);
     }
     uptime = millis() / 1000;
     if (uptime % 60 == 0)
     {
         Particle.publish("alive", String(uptime), 20); // https://console.particle.io/events
-	Particle.publish("temperature", String(s_temperature), 20);
-	Particle.publish("humidity", String(s_humidity), 20);
+	Particle.publish("temp_out", String(s_temperature), 20);
+	Particle.publish("hum_out", String(s_humidity), 20);
         delay(1000);
     }
 
+	if (uptime % 90 == 0)
+	{
+		Particle.publish("temp_in", String(s_tempIn), 20);
+		Particle.publish("hum_in", String(s_humIn), 20);
+	}
+
     temp_humidity_loop();
+    tempHumLoopIn();
     delay(1000);
    // Nothing to do here
 }
@@ -127,14 +130,6 @@ int ledToggle(String command) {
     {
         mode = 1;
     }
-    else if (command == "2")
-    {
-        mode = 2;
-    }
-    else
-    {
-        mode = 3;
-    }
     
     Particle.publish("mode", String(mode), 10);
     
@@ -144,6 +139,7 @@ int ledToggle(String command) {
 static void init_devices()
 {
 	s_dht = new PietteTech_DHT(DHT_DATA_PIN, DHT22, dht_wrapper);
+	s_dhtIn = new PietteTech_DHT(D3, DHT22, dhtIn_isr);
 }
 
 static void temp_humidity_loop()
@@ -192,3 +188,51 @@ static void temp_humidity_loop()
 	s_temp = (int)s_temperature;
 	s_hum = (int)s_humidity;
 }
+
+static void tempHumLoopIn()
+{
+	int result = s_dhtIn->acquireAndWait(2000);
+
+	if (result != DHTLIB_OK)
+	{
+		delete s_dhtIn;
+		s_dhtIn = new PietteTech_DHT(D3, DHT22, dhtIn_isr);
+		switch (result)
+		{
+			case DHTLIB_OK:
+				Serial.println("OK");
+				break;
+			case DHTLIB_ERROR_CHECKSUM:
+				Serial.println("Error\n\r\tChecksum error");
+				break;
+			case DHTLIB_ERROR_ISR_TIMEOUT:
+				Serial.println("Error\n\r\tISR time out error");
+				break;
+			case DHTLIB_ERROR_RESPONSE_TIMEOUT:
+				Serial.println("Error\n\r\tResponse time out error");
+				break;
+			case DHTLIB_ERROR_DATA_TIMEOUT:
+				Serial.println("Error\n\r\tData time out error");
+				break;
+			case DHTLIB_ERROR_ACQUIRING:
+				Serial.println("Error\n\r\tAcquiring");
+				break;
+			case DHTLIB_ERROR_DELTA:
+				Serial.println("Error\n\r\tDelta time too small");
+				break;
+			case DHTLIB_ERROR_NOTSTARTED:
+				Serial.println("Error\n\r\tNot started");
+				break;
+			default:
+				Serial.println("Unknown error");
+				break;
+		}
+		return;
+	}
+
+	s_tempIn = s_dhtIn->getCelsius();
+	s_humIn = s_dhtIn->getHumidity();
+	s_tempIntIn = (int)s_tempIn;
+	s_humIntIn = (int)s_humIn;
+}
+

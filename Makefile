@@ -8,7 +8,7 @@ dev-list:
 	particle list
 
 flash:
-	particle flash Koduvalvur firmware.bin
+	particle flash Koluvalvur firmware.bin
 
 serial:
 	particle serial monitor

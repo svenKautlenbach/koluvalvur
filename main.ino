@@ -43,6 +43,16 @@ void dhtIn_isr()
 static void init_devices();
 static void temp_humidity_loop();
 
+int intervalSet(String command)
+{
+	long interval = command.toInt();
+	if (interval < 1 || interval > 1440)
+		return -1;
+
+	s_updateIntervalMin = (int)interval; 
+	return s_updateIntervalMin;
+}
+
 void setup()
 {
 
@@ -51,7 +61,8 @@ void setup()
    pinMode(led2, OUTPUT);
 
    // We are also going to declare a Spark.function so that we can turn the LED on and off from the cloud.
-   Particle.function("relee",ledToggle);
+   Particle.function("relee", ledToggle);
+   Particle.function("interval", intervalSet);
    Particle.variable("uptime",&uptime, INT); // https://docs.particle.io/reference/firmware/core/#particle-publish-
    // This is saying that when we ask the cloud for the function "led", it will employ the function ledToggle() from this app.
 

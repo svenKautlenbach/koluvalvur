@@ -1,13 +1,7 @@
-// -----------------------------------
-// Controlling LEDs over the Internet
-// -----------------------------------
 #include "PietteTech_DHT.h"
-// First, let's create our "shorthand" for the pins
-// Same as in the Blink an LED example:
-// led1 is D0, led2 is D7
-
 #define DHT_DATA_PIN		D1
 
+// led1 is D0, led2 is D7
 int led1 = D0;
 int led2 = D7;
 
@@ -19,6 +13,9 @@ int uptime = 0;
 PietteTech_DHT* s_dht = NULL;
 PietteTech_DHT* s_dhtIn = NULL;
 
+static int s_lastUpdate = 0;
+static int s_updateIntervalMin = 60;
+
 static float s_temperature = 0;
 static float s_humidity = 0;
 static int s_temp = 0;
@@ -28,13 +25,14 @@ static float s_tempIn = 0;
 static float s_humIn = 0;
 static int s_tempIntIn = 0;
 static int s_humIntIn = 0;
+bool relayOn = false;
 
 // Last time, we only needed to declare pins in the setup function.
 // This time, we are also going to register our Spark function
 
 void dht_wrapper()
 {
-    s_dht->isrCallback();
+	s_dht->isrCallback();
 }
 
 void dhtIn_isr()
@@ -53,7 +51,7 @@ void setup()
    pinMode(led2, OUTPUT);
 
    // We are also going to declare a Spark.function so that we can turn the LED on and off from the cloud.
-   Particle.function("led",ledToggle);
+   Particle.function("relee",ledToggle);
    Particle.variable("uptime",&uptime, INT); // https://docs.particle.io/reference/firmware/core/#particle-publish-
    // This is saying that when we ask the cloud for the function "led", it will employ the function ledToggle() from this app.
 
@@ -62,6 +60,9 @@ void setup()
 
 	Particle.variable("temp_in", &s_tempIntIn, INT);
 	Particle.variable("hum_in", &s_humIntIn, INT);
+
+	Particle.variable("interval", &s_updateIntervalMin, INT);
+	Particle.variable("relee", (int*)&relayOn, INT);
 
    // For good measure, let's also make sure both LEDs are off when we start:
    digitalWrite(led1, LOW);
@@ -78,35 +79,40 @@ void setup()
 
 void loop()
 {
-    if (mode == 0)
-    {
-        digitalWrite(led1, LOW);
-        digitalWrite(led2, LOW);
-    }
-    else if (mode == 1)
-    {
-        digitalWrite(led1, HIGH);
-        digitalWrite(led2, HIGH);
-    }
-    uptime = millis() / 1000;
-    if (uptime % 60 == 0)
-    {
-        Particle.publish("alive", String(uptime), 20); // https://console.particle.io/events
-	Particle.publish("temp_out", String(s_temperature), 20);
-	Particle.publish("hum_out", String(s_humidity), 20);
-        delay(1000);
-    }
-
-	if (uptime % 90 == 0)
+	if (mode == 0)
 	{
+		digitalWrite(led1, LOW);
+		digitalWrite(led2, LOW);
+		relayOn = false;
+	}
+	else if (mode == 1)
+	{
+		relayOn = true;
+		digitalWrite(led1, HIGH);
+		digitalWrite(led2, HIGH);
+	}
+	
+	int timeNow = Time.now();
+	if (timeNow - s_lastUpdate >= s_updateIntervalMin * 60)
+	{
+		temp_humidity_loop();
+		tempHumLoopIn();
+		Particle.publish("alive", String(uptime), 20); // https://console.particle.io/event
+		Particle.publish("temp_out", String(s_temperature), 20);
+		Particle.publish("hum_out", String(s_humidity), 20);
 		Particle.publish("temp_in", String(s_tempIn), 20);
 		Particle.publish("hum_in", String(s_humIn), 20);
+		s_lastUpdate = timeNow;
 	}
 
-    temp_humidity_loop();
-    tempHumLoopIn();
-    delay(1000);
-   // Nothing to do here
+	if (Time.second() == 0)
+	{
+		temp_humidity_loop();
+		tempHumLoopIn();
+	}
+
+	uptime = millis() / 1000;
+	delay(1000);
 }
 
 // We're going to have a super cool function now that gets called when a matching API request is sent

@@ -1,5 +1,5 @@
 all: $(clean)
-	particle compile photon main.ino am2302/firmware/PietteTech_DHT.* --saveTo firmware.bin
+	particle compile photon main.ino relay_guard.* am2302/firmware/PietteTech_DHT.* --saveTo firmware.bin
 
 clean:
 	rm *.bin

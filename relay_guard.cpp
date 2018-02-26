@@ -2,7 +2,7 @@
 
 #include "Particle.h"
 
-extern bool relayOn;
+extern int relayOn;
 extern int led1;
 extern int led2;
 
@@ -26,7 +26,7 @@ static Timer offlineTimer(60 * 1000, setRelay, true);
 
 void checkRelay()
 {
-	if (!relayOn)
+	if (relayOn == 0)
 	{
 		offlineTimer.stop();
 		return;

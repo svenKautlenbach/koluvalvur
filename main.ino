@@ -25,7 +25,7 @@ static float s_tempIn = 0;
 static float s_humIn = 0;
 static int s_tempIntIn = 0;
 static int s_humIntIn = 0;
-bool relayOn = false;
+int relayOn = 0;
 
 // Last time, we only needed to declare pins in the setup function.
 // This time, we are also going to register our Spark function
@@ -62,7 +62,7 @@ void setup()
 	Particle.variable("hum_in", &s_humIntIn, INT);
 
 	Particle.variable("interval", &s_updateIntervalMin, INT);
-	Particle.variable("relee", (int*)&relayOn, INT);
+	Particle.variable("relee", &relayOn, INT);
 
    // For good measure, let's also make sure both LEDs are off when we start:
    digitalWrite(led1, LOW);
@@ -83,11 +83,11 @@ void loop()
 	{
 		digitalWrite(led1, LOW);
 		digitalWrite(led2, LOW);
-		relayOn = false;
+		relayOn = 0;
 	}
 	else if (mode == 1)
 	{
-		relayOn = true;
+		relayOn = 1;
 		digitalWrite(led1, HIGH);
 		digitalWrite(led2, HIGH);
 	}

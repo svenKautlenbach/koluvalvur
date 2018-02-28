@@ -1,4 +1,8 @@
 #include "PietteTech_DHT.h"
+
+// For thingspeak stuff - https://www.hackster.io/sentient-things/thingspeak-particle-photon-using-webhooks-dbd96c
+// Some other input - http://isetegija.ee/esp8266-wifi-mooduli-programmeerimine-salvestame-andmed-pilve/
+
 #define DHT_DATA_PIN		D1
 
 // led1 is D0, led2 is D7
@@ -108,11 +112,9 @@ void loop()
 	{
 		temp_humidity_loop();
 		tempHumLoopIn();
-		Particle.publish("alive", String(uptime), 20); // https://console.particle.io/event
+		//Particle.publish("alive", String(uptime), 20); // https://console.particle.io/event
 		Particle.publish("temp_out", String(s_temperature), 20);
-		Particle.publish("hum_out", String(s_humidity), 20);
-		Particle.publish("temp_in", String(s_tempIn), 20);
-		Particle.publish("hum_in", String(s_humIn), 20);
+		Particle.publish("thingSpeakWrite_kolu", "{ \"1\": \"" + String(s_temperature) + "\", \"2\": \"" + String(s_tempIn) + "\", \"3\": \"" + String(s_hum) + "\", \"4\": \"" + String(s_humIn) + "\", \"5\": \"" + String(relayOn) + "\", \"k\": \"ZZM3M6EJL6R2YJ58\" }", 60, PRIVATE);	
 		s_lastUpdate = timeNow;
 	}
 

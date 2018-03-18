@@ -31,6 +31,8 @@ static int s_tempIntIn = 0;
 static int s_humIntIn = 0;
 int relayOn = 0;
 
+STARTUP(WiFi.selectAntenna(ANT_EXTERNAL));
+
 // Last time, we only needed to declare pins in the setup function.
 // This time, we are also going to register our Spark function
 

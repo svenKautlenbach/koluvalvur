@@ -116,7 +116,7 @@ void loop()
 		tempHumLoopIn();
 		//Particle.publish("alive", String(uptime), 20); // https://console.particle.io/event
 		Particle.publish("temp_out", String(s_temperature), 20);
-		Particle.publish("thingSpeakWrite_kolu", "{ \"1\": \"" + String(s_temperature) + "\", \"2\": \"" + String(s_tempIn) + "\", \"3\": \"" + String(s_hum) + "\", \"4\": \"" + String(s_humIn) + "\", \"5\": \"" + String(relayOn) + "\", \"k\": \"ZZM3M6EJL6R2YJ58\" }", 60, PRIVATE);	
+		Particle.publish("thingSpeakWrite_kolu", "{ \"1\": \"" + String(s_temperature) + "\", \"2\": \"" + String(s_tempIn) + "\", \"3\": \"" + String(s_hum) + "\", \"4\": \"" + String(s_humIn) + "\", \"5\": \"" + String(relayOn) + "\", \"k\": \"6JSVCMFGRV4O9OQH\" }", 60, PRIVATE);	
 		s_lastUpdate = timeNow;
 	}
 

@@ -4,6 +4,7 @@
 // Some other input - http://isetegija.ee/esp8266-wifi-mooduli-programmeerimine-salvestame-andmed-pilve/
 
 #define DHT_DATA_PIN		D1
+#define DHT3_DATA_PIN		D2
 
 // led1 is D0, led2 is D7
 int led1 = D0;
@@ -16,6 +17,7 @@ int uptime = 0;
 
 PietteTech_DHT* s_dht = NULL;
 PietteTech_DHT* s_dhtIn = NULL;
+PietteTech_DHT* s_dht3 = NULL;
 
 static int s_lastUpdate = 0;
 static int s_updateIntervalMin = 60;
@@ -33,21 +35,47 @@ int relayOn = 0;
 
 STARTUP(WiFi.selectAntenna(ANT_EXTERNAL));
 
+struct DhtParticleInfo
+{
+	String status;
+	int temp;
+	int humidity;
+};
+
+struct DhtMeasurement
+{
+	int result;
+	float temp;
+	float humidity;
+};
+
+static struct DhtParticleInfo s_dht3ParticleInfo;
+
 // Last time, we only needed to declare pins in the setup function.
 // This time, we are also going to register our Spark function
 
 void dht_wrapper()
 {
-	s_dht->isrCallback();
+	if (s_dht != NULL)
+		s_dht->isrCallback();
 }
 
 void dhtIn_isr()
 {
-	s_dhtIn->isrCallback();
+	if (s_dhtIn != NULL)
+		s_dhtIn->isrCallback();
+}
+
+void dht3_isr()
+{
+	if (s_dht3 != NULL)
+		s_dht3->isrCallback();
 }
 
 static void init_devices();
 static void temp_humidity_loop();
+static DhtParticleInfo convertToParticleInfo(DhtMeasurement* measurement);
+static DhtMeasurement doMeasurementOf(PietteTech_DHT* device);
 
 int intervalSet(String command)
 {
@@ -62,15 +90,15 @@ int intervalSet(String command)
 void setup()
 {
 
-   // Here's the pin configuration, same as last time
-   pinMode(led1, OUTPUT);
-   pinMode(led2, OUTPUT);
+	// Here's the pin configuration, same as last time
+	pinMode(led1, OUTPUT);
+	pinMode(led2, OUTPUT);
 
-   // We are also going to declare a Spark.function so that we can turn the LED on and off from the cloud.
-   Particle.function("relee", ledToggle);
-   Particle.function("interval", intervalSet);
-   Particle.variable("uptime",&uptime, INT); // https://docs.particle.io/reference/firmware/core/#particle-publish-
-   // This is saying that when we ask the cloud for the function "led", it will employ the function ledToggle() from this app.
+	// We are also going to declare a Spark.function so that we can turn the LED on and off from the cloud.
+	Particle.function("relee", ledToggle);
+	Particle.function("interval", intervalSet);
+	Particle.variable("uptime",&uptime, INT); // https://docs.particle.io/reference/firmware/core/#particle-publish-
+	// This is saying that when we ask the cloud for the function "led", it will employ the function ledToggle() from this app.
 
 	Particle.variable("temp_out", &s_temp, INT);
 	Particle.variable("hum_out", &s_hum, INT);
@@ -78,12 +106,16 @@ void setup()
 	Particle.variable("temp_in", &s_tempIntIn, INT);
 	Particle.variable("hum_in", &s_humIntIn, INT);
 
+	Particle.variable("DHT3_status", &s_dht3ParticleInfo.status, STRING);
+	Particle.variable("temp_3", &s_dht3ParticleInfo.temp, INT);
+	Particle.variable("humidity_3", &s_dht3ParticleInfo.humidity, INT);
+
 	Particle.variable("interval", &s_updateIntervalMin, INT);
 	Particle.variable("relee", &relayOn, INT);
 
-   // For good measure, let's also make sure both LEDs are off when we start:
-   digitalWrite(led1, LOW);
-   digitalWrite(led2, LOW);
+	// For good measure, let's also make sure both LEDs are off when we start:
+	digitalWrite(led1, LOW);
+	digitalWrite(led2, LOW);
 
 
 	init_devices();
@@ -112,11 +144,19 @@ void loop()
 	int timeNow = Time.now();
 	if (timeNow - s_lastUpdate >= s_updateIntervalMin * 60)
 	{
+		// Device data update.
 		temp_humidity_loop();
 		tempHumLoopIn();
-		//Particle.publish("alive", String(uptime), 20); // https://console.particle.io/event
-		Particle.publish("temp_out", String(s_temperature), 20);
-		Particle.publish("thingSpeakWrite_kolu", "{ \"1\": \"" + String(s_temperature) + "\", \"2\": \"" + String(s_tempIn) + "\", \"3\": \"" + String(s_hum) + "\", \"4\": \"" + String(s_humIn) + "\", \"5\": \"" + String(relayOn) + "\", \"k\": \"6JSVCMFGRV4O9OQH\" }", 60, PRIVATE);	
+		DhtMeasurement dht3Measurement = doMeasurementOf(s_dht3);
+		s_dht3ParticleInfo = convertToParticleInfo(&dht3Measurement);
+
+		Particle.publish("temp_out", String(s_temperature), 20, PRIVATE);
+		Particle.publish("thingSpeakWrite_kolu", "{ \"1\": \"" + String(s_temperature) +
+											   "\", \"2\": \"" + String(s_tempIn) + 
+											   "\", \"3\": \"" + String(s_hum) +
+											   "\", \"4\": \"" + String(s_humIn) +
+											   "\", \"5\": \"" + String(relayOn) +
+											   "\", \"k\": \"6JSVCMFGRV4O9OQH\" }", 60, PRIVATE);	
 		s_lastUpdate = timeNow;
 	}
 
@@ -124,6 +164,8 @@ void loop()
 	{
 		temp_humidity_loop();
 		tempHumLoopIn();
+		DhtMeasurement dht3Measurement = doMeasurementOf(s_dht3);
+		s_dht3ParticleInfo = convertToParticleInfo(&dht3Measurement);
 	}
 
 	uptime = millis() / 1000;
@@ -152,7 +194,7 @@ int ledToggle(String command) {
         mode = 1;
     }
     
-    Particle.publish("mode", String(mode), 10);
+    Particle.publish("mode", String(mode), 10, PRIVATE);
     
     return mode;
 }
@@ -161,6 +203,7 @@ static void init_devices()
 {
 	s_dht = new PietteTech_DHT(DHT_DATA_PIN, DHT22, dht_wrapper);
 	s_dhtIn = new PietteTech_DHT(D3, DHT22, dhtIn_isr);
+	s_dht3 = new PietteTech_DHT(DHT3_DATA_PIN, DHT22, dht3_isr);
 }
 
 static void temp_humidity_loop()
@@ -257,3 +300,51 @@ static void tempHumLoopIn()
 	s_humIntIn = (int)s_humIn;
 }
 
+static DhtMeasurement doMeasurementOf(PietteTech_DHT* device)
+{
+	DhtMeasurement m{};
+	m.result = device->acquireAndWait(2000);
+
+	if (m.result != DHTLIB_OK)
+		return m;
+
+	m.temp = device->getCelsius();
+	m.humidity = device->getHumidity();
+	return m;
+}
+
+static String dhtResultToString(int result)
+{
+	switch (result)
+	{
+		case DHTLIB_OK:
+			return String("OK");
+		case DHTLIB_ERROR_CHECKSUM:
+			return String("Checksum error");
+		case DHTLIB_ERROR_ISR_TIMEOUT:
+			return String("ISR timeout");
+		case DHTLIB_ERROR_RESPONSE_TIMEOUT:
+			return String("Response timeout");
+		case DHTLIB_ERROR_DATA_TIMEOUT:
+			return String("Data timeout");
+		case DHTLIB_ERROR_ACQUIRING:
+			return String("Acquire error");
+		case DHTLIB_ERROR_DELTA:
+			return String("Delta error");
+		case DHTLIB_ERROR_NOTSTARTED:
+			return String("Not started");
+		default:
+			return String("Unknown status of " + String(result));
+	}
+}
+
+static DhtParticleInfo convertToParticleInfo(DhtMeasurement* measurement)
+{
+	DhtParticleInfo info{};
+
+	info.status = dhtResultToString(measurement->result);
+	info.temp = (int)measurement->temp;
+	info.humidity = (int)measurement->humidity;
+
+	return info;
+}

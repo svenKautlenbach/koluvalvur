@@ -117,10 +117,10 @@ void loop()
 		freeDht22Devices();
 
 		Particle.publish("thingSpeakWrite_kolu", "{ \"1\": \"" + String(s_dhtParticleInfos[0].temp) +
-											   "\", \"2\": \"" + String(s_dhtParticleInfos[0].temp) + 
-											   "\", \"3\": \"" + String(s_dhtParticleInfos[1].humidity) +
-											   "\", \"4\": \"" + String(s_dhtParticleInfos[1].humidity) +
-											   "\", \"5\": \"" + String(s_relayOn) +
+											   "\", \"2\": \"" + String(s_dhtParticleInfos[1].temp) + 
+											   "\", \"3\": \"" + String(s_dhtParticleInfos[0].humidity) +
+											   "\", \"4\": \"" + String(s_dhtParticleInfos[2].temp) +
+											   "\", \"5\": \"" + String(s_dhtParticleInfos[3].temp) +
 											   "\", \"k\": \"6JSVCMFGRV4O9OQH\" }", 60, PRIVATE);	
 		s_lastUpdate = timeNow;
 	}
@@ -170,6 +170,7 @@ static void initDevices()
 static void freeDht22Devices()
 {
 	for (int i = 0; i < DHT22_DEVICE_COUNT; i++) {
+		activeDht22DeviceIndex = i;
 		if (s_dhtDevices[i] != NULL)
 			delete s_dhtDevices[i];
 	}

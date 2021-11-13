@@ -4,8 +4,10 @@
 // Some other input - http://isetegija.ee/esp8266-wifi-mooduli-programmeerimine-salvestame-andmed-pilve/
 
 #define DHT1_DATA_PIN		D1
-#define DHT2_DATA_PIN		D3
-#define DHT3_DATA_PIN		D2
+#define DHT2_DATA_PIN		D2
+#define DHT3_DATA_PIN		D3
+#define DHT4_DATA_PIN		D4
+#define DHT5_DATA_PIN		D5
 
 // led1 is D0, led2 is D7
 int led1 = D0;
@@ -14,15 +16,18 @@ int led2 = D7;
 int mode = 0;
 int s_uptime = 0;
 
-PietteTech_DHT* s_dht1 = NULL;
-PietteTech_DHT* s_dht2 = NULL;
-PietteTech_DHT* s_dht3 = NULL;
+// Use primary serial over USB interface for logging output
+static SerialLogHandler s_logHandler;
+
+static PietteTech_DHT* s_dht1 = NULL;
+static PietteTech_DHT* s_dht2 = NULL;
+static PietteTech_DHT* s_dht3 = NULL;
+static PietteTech_DHT* s_dht4 = NULL;
+static PietteTech_DHT* s_dht5 = NULL;
 
 static int s_lastUpdate = 0;
 static int s_updateIntervalMin = 60;
 static int s_relayOn = 0;
-
-STARTUP(WiFi.selectAntenna(ANT_EXTERNAL));
 
 struct DhtParticleInfo
 {
@@ -41,6 +46,8 @@ struct DhtMeasurement
 static struct DhtParticleInfo s_dht1ParticleInfo;
 static struct DhtParticleInfo s_dht2ParticleInfo;
 static struct DhtParticleInfo s_dht3ParticleInfo;
+static struct DhtParticleInfo s_dht4ParticleInfo;
+static struct DhtParticleInfo s_dht5ParticleInfo;
 
 void dht1_isr()
 {
@@ -60,6 +67,18 @@ void dht3_isr()
 		s_dht3->isrCallback();
 }
 
+void dht4_isr()
+{
+	if (s_dht4 != NULL)
+		s_dht4->isrCallback();
+}
+
+void dht5_isr()
+{
+	if (s_dht5 != NULL)
+		s_dht5->isrCallback();
+}
+
 static void initDevices();
 static DhtParticleInfo convertToParticleInfo(DhtMeasurement* measurement);
 static DhtMeasurement doMeasurementOf(PietteTech_DHT* device);
@@ -76,6 +95,8 @@ int intervalSet(String command)
 
 void setup()
 {
+	Log.info("System version: %s", (const char*)System.version());
+
 	pinMode(led1, OUTPUT);
 	pinMode(led2, OUTPUT);
 
@@ -94,6 +115,14 @@ void setup()
 	Particle.variable("temp3", &s_dht3ParticleInfo.temp, INT);
 	Particle.variable("niiskus3", &s_dht3ParticleInfo.humidity, INT);
 	Particle.variable("staatus3", &s_dht3ParticleInfo.status, STRING);
+
+	Particle.variable("temp4", &s_dht4ParticleInfo.temp, INT);
+	Particle.variable("niiskus4", &s_dht4ParticleInfo.humidity, INT);
+	Particle.variable("staatus4", &s_dht4ParticleInfo.status, STRING);
+	
+	Particle.variable("temp5", &s_dht5ParticleInfo.temp, INT);
+	Particle.variable("niiskus5", &s_dht5ParticleInfo.humidity, INT);
+	Particle.variable("staatus5", &s_dht5ParticleInfo.status, STRING);
 
 	Particle.variable("interval_minutes", &s_updateIntervalMin, INT);
 	Particle.variable("relee", &s_relayOn, INT);
@@ -132,6 +161,10 @@ void loop()
 		s_dht2ParticleInfo = convertToParticleInfo(&dht2Measurement);
 		DhtMeasurement dht3Measurement = doMeasurementOf(s_dht3);
 		s_dht3ParticleInfo = convertToParticleInfo(&dht3Measurement);
+		DhtMeasurement dht4Measurement = doMeasurementOf(s_dht4);
+		s_dht4ParticleInfo = convertToParticleInfo(&dht4Measurement);
+		DhtMeasurement dht5Measurement = doMeasurementOf(s_dht5);
+		s_dht5ParticleInfo = convertToParticleInfo(&dht5Measurement);
 
 		Particle.publish("thingSpeakWrite_kolu", "{ \"1\": \"" + String(s_dht1ParticleInfo.temp) +
 											   "\", \"2\": \"" + String(s_dht2ParticleInfo.temp) + 
@@ -150,6 +183,10 @@ void loop()
 		s_dht2ParticleInfo = convertToParticleInfo(&dht2Measurement);
 		DhtMeasurement dht3Measurement = doMeasurementOf(s_dht3);
 		s_dht3ParticleInfo = convertToParticleInfo(&dht3Measurement);
+		DhtMeasurement dht4Measurement = doMeasurementOf(s_dht4);
+		s_dht4ParticleInfo = convertToParticleInfo(&dht4Measurement);
+		DhtMeasurement dht5Measurement = doMeasurementOf(s_dht5);
+		s_dht5ParticleInfo = convertToParticleInfo(&dht5Measurement);
 	}
 
 	s_uptime = millis() / 1000;
@@ -184,6 +221,8 @@ static void initDevices()
 	s_dht1 = new PietteTech_DHT(DHT1_DATA_PIN, DHT22, dht1_isr);
 	s_dht2 = new PietteTech_DHT(DHT2_DATA_PIN, DHT22, dht2_isr);
 	s_dht3 = new PietteTech_DHT(DHT3_DATA_PIN, DHT22, dht3_isr);
+	s_dht4 = new PietteTech_DHT(DHT4_DATA_PIN, DHT22, dht4_isr);
+	s_dht5 = new PietteTech_DHT(DHT5_DATA_PIN, DHT22, dht5_isr);
 }
 
 

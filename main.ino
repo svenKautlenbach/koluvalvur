@@ -1,3 +1,4 @@
+#include "Adafruit_MAX6675.h"
 #include "PietteTech_DHT.h"
 
 // For thingspeak stuff - https://www.hackster.io/sentient-things/thingspeak-particle-photon-using-webhooks-dbd96c
@@ -10,8 +11,11 @@ int led2 = D7;
 int mode = 0;
 int s_uptime = 0;
 
-// Use primary serial over USB interface for logging output
-static SerialLogHandler s_logHandler;
+const int thermoCLK = A3;
+const int thermoCS = A2;
+const int thermoDO = A4;
+static Adafruit_MAX6675* s_thermocouple{NULL};
+static double s_thermocouple_celsius{};
 
 #define DHT22_DEVICE_COUNT 5
 const static uint8_t DHT22_PINS[DHT22_DEVICE_COUNT]{D1, D2, D3, D4, D5};
@@ -58,16 +62,18 @@ int intervalSet(String command)
 	return s_updateIntervalMin;
 }
 
+STARTUP(WiFi.selectAntenna(ANT_EXTERNAL));
+
 void setup()
 {
-	Log.info("System version: %s", (const char*)System.version());
-
 	pinMode(led1, OUTPUT);
 	pinMode(led2, OUTPUT);
 
 	Particle.function("relee", ledToggle);
 	Particle.function("interval_minutes", intervalSet);
 	Particle.variable("uptime_seconds", &s_uptime, INT); // https://docs.particle.io/reference/firmware/core/#particle-publish-
+
+	Particle.variable("thermocouple", s_thermocouple_celsius);
 
 	for (int i = 0; i < DHT22_DEVICE_COUNT; i++) {
 		Particle.variable(String::format("temp%d", i+1), s_dhtParticleInfos[i].temp);
@@ -88,6 +94,8 @@ static void updateMeasurements() {
 		DhtMeasurement m = doMeasurementOf(s_dhtDevices[i]);
 		s_dhtParticleInfos[i] = convertToParticleInfo(&m);
 	}
+   
+	s_thermocouple_celsius = s_thermocouple->readCelsius();
 }
 
 // Last time, we wanted to continously blink the LED on and off
@@ -120,7 +128,7 @@ void loop()
 											   "\", \"2\": \"" + String(s_dhtParticleInfos[1].temp) + 
 											   "\", \"3\": \"" + String(s_dhtParticleInfos[0].humidity) +
 											   "\", \"4\": \"" + String(s_dhtParticleInfos[2].temp) +
-											   "\", \"5\": \"" + String(s_dhtParticleInfos[3].temp) +
+											   "\", \"5\": \"" + String((int)s_thermocouple_celsius) +
 											   "\", \"k\": \"6JSVCMFGRV4O9OQH\" }", 60, PRIVATE);	
 		s_lastUpdate = timeNow;
 	}
@@ -165,6 +173,8 @@ static void initDevices()
 		activeDht22DeviceIndex = i;
 		s_dhtDevices[i] = new PietteTech_DHT(DHT22_PINS[i], DHT22, dht22_isr);
 	}
+
+    s_thermocouple = new Adafruit_MAX6675(thermoCLK, thermoCS, thermoDO);
 }
 
 static void freeDht22Devices()
@@ -179,7 +189,7 @@ static void freeDht22Devices()
 static DhtMeasurement doMeasurementOf(PietteTech_DHT* device)
 {
 	DhtMeasurement m{};
-	m.result = device->acquireAndWait(2000);
+	m.result = device->acquireAndWait(2500);
 
 	if (m.result != DHTLIB_OK)
 		return m;

@@ -1,3 +1,6 @@
 [submodule "am2302"]
 	path = am2302
 	url = git@github.com:svenKautlenbach/PietteTech_DHT.git
+[submodule "ParticlePhoton-MAX6675-master"]
+	path = ParticlePhoton-MAX6675-master
+	url = https://github.com/alexoliv88/ParticlePhoton-MAX6675-master.git

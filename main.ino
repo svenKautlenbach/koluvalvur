@@ -3,12 +3,6 @@
 // For thingspeak stuff - https://www.hackster.io/sentient-things/thingspeak-particle-photon-using-webhooks-dbd96c
 // Some other input - http://isetegija.ee/esp8266-wifi-mooduli-programmeerimine-salvestame-andmed-pilve/
 
-#define DHT1_DATA_PIN		D1
-#define DHT2_DATA_PIN		D2
-#define DHT3_DATA_PIN		D3
-#define DHT4_DATA_PIN		D4
-#define DHT5_DATA_PIN		D5
-
 // led1 is D0, led2 is D7
 int led1 = D0;
 int led2 = D7;
@@ -19,14 +13,12 @@ int s_uptime = 0;
 // Use primary serial over USB interface for logging output
 static SerialLogHandler s_logHandler;
 
-static PietteTech_DHT* s_dht1 = NULL;
-static PietteTech_DHT* s_dht2 = NULL;
-static PietteTech_DHT* s_dht3 = NULL;
-static PietteTech_DHT* s_dht4 = NULL;
-static PietteTech_DHT* s_dht5 = NULL;
+#define DHT22_DEVICE_COUNT 5
+const static uint8_t DHT22_PINS[DHT22_DEVICE_COUNT]{D1, D2, D3, D4, D5};
+static PietteTech_DHT* s_dhtDevices[DHT22_DEVICE_COUNT]{NULL, NULL, NULL, NULL, NULL};
 
 static int s_lastUpdate = 0;
-static int s_updateIntervalMin = 60;
+static int s_updateIntervalMin = 1;
 static int s_relayOn = 0;
 
 struct DhtParticleInfo
@@ -43,44 +35,17 @@ struct DhtMeasurement
 	float humidity;
 };
 
-static struct DhtParticleInfo s_dht1ParticleInfo;
-static struct DhtParticleInfo s_dht2ParticleInfo;
-static struct DhtParticleInfo s_dht3ParticleInfo;
-static struct DhtParticleInfo s_dht4ParticleInfo;
-static struct DhtParticleInfo s_dht5ParticleInfo;
+static struct DhtParticleInfo s_dhtParticleInfos[DHT22_DEVICE_COUNT]{};
 
-void dht1_isr()
+static volatile int activeDht22DeviceIndex{0};
+void dht22_isr()
 {
-	if (s_dht1 != NULL)
-		s_dht1->isrCallback();
-}
-
-void dht2_isr()
-{
-	if (s_dht2 != NULL)
-		s_dht2->isrCallback();
-}
-
-void dht3_isr()
-{
-	if (s_dht3 != NULL)
-		s_dht3->isrCallback();
-}
-
-void dht4_isr()
-{
-	if (s_dht4 != NULL)
-		s_dht4->isrCallback();
-}
-
-void dht5_isr()
-{
-	if (s_dht5 != NULL)
-		s_dht5->isrCallback();
+	if (s_dhtDevices[activeDht22DeviceIndex] != NULL)
+		s_dhtDevices[activeDht22DeviceIndex]->isrCallback();
 }
 
 static void initDevices();
-static DhtParticleInfo convertToParticleInfo(DhtMeasurement* measurement);
+static DhtParticleInfo convertToParticleInfo(const DhtMeasurement* measurement);
 static DhtMeasurement doMeasurementOf(PietteTech_DHT* device);
 
 int intervalSet(String command)
@@ -104,25 +69,11 @@ void setup()
 	Particle.function("interval_minutes", intervalSet);
 	Particle.variable("uptime_seconds", &s_uptime, INT); // https://docs.particle.io/reference/firmware/core/#particle-publish-
 
-	Particle.variable("temp1", &s_dht1ParticleInfo.temp, INT);
-	Particle.variable("niiskus1", &s_dht1ParticleInfo.humidity, INT);
-	Particle.variable("staatus1", &s_dht1ParticleInfo.status, STRING);
-
-	Particle.variable("temp2", &s_dht2ParticleInfo.temp, INT);
-	Particle.variable("niiskus2", &s_dht2ParticleInfo.humidity, INT);
-	Particle.variable("staatus2", &s_dht2ParticleInfo.status, STRING);
-
-	Particle.variable("temp3", &s_dht3ParticleInfo.temp, INT);
-	Particle.variable("niiskus3", &s_dht3ParticleInfo.humidity, INT);
-	Particle.variable("staatus3", &s_dht3ParticleInfo.status, STRING);
-
-	Particle.variable("temp4", &s_dht4ParticleInfo.temp, INT);
-	Particle.variable("niiskus4", &s_dht4ParticleInfo.humidity, INT);
-	Particle.variable("staatus4", &s_dht4ParticleInfo.status, STRING);
-	
-	Particle.variable("temp5", &s_dht5ParticleInfo.temp, INT);
-	Particle.variable("niiskus5", &s_dht5ParticleInfo.humidity, INT);
-	Particle.variable("staatus5", &s_dht5ParticleInfo.status, STRING);
+	for (int i = 0; i < DHT22_DEVICE_COUNT; i++) {
+		Particle.variable(String::format("temp%d", i+1), s_dhtParticleInfos[i].temp);
+		Particle.variable(String::format("niiskus%d", i+1), s_dhtParticleInfos[i].humidity);
+		Particle.variable(String::format("staatus%d", i+1), s_dhtParticleInfos[i].status);
+	}
 
 	Particle.variable("interval_minutes", &s_updateIntervalMin, INT);
 	Particle.variable("relee", &s_relayOn, INT);
@@ -154,22 +105,16 @@ void loop()
 	int timeNow = Time.now();
 	if (timeNow - s_lastUpdate >= s_updateIntervalMin * 60)
 	{
-		// Device data update.
-		DhtMeasurement dht1Measurement = doMeasurementOf(s_dht1);
-		s_dht1ParticleInfo = convertToParticleInfo(&dht1Measurement);
-		DhtMeasurement dht2Measurement = doMeasurementOf(s_dht2);
-		s_dht2ParticleInfo = convertToParticleInfo(&dht2Measurement);
-		DhtMeasurement dht3Measurement = doMeasurementOf(s_dht3);
-		s_dht3ParticleInfo = convertToParticleInfo(&dht3Measurement);
-		DhtMeasurement dht4Measurement = doMeasurementOf(s_dht4);
-		s_dht4ParticleInfo = convertToParticleInfo(&dht4Measurement);
-		DhtMeasurement dht5Measurement = doMeasurementOf(s_dht5);
-		s_dht5ParticleInfo = convertToParticleInfo(&dht5Measurement);
+		for (int i = 0; i < DHT22_DEVICE_COUNT; i++) {
+			activeDht22DeviceIndex = i;
+			DhtMeasurement m = doMeasurementOf(s_dhtDevices[i]);
+			s_dhtParticleInfos[i] = convertToParticleInfo(&m);
+		}
 
-		Particle.publish("thingSpeakWrite_kolu", "{ \"1\": \"" + String(s_dht1ParticleInfo.temp) +
-											   "\", \"2\": \"" + String(s_dht2ParticleInfo.temp) + 
-											   "\", \"3\": \"" + String(s_dht1ParticleInfo.humidity) +
-											   "\", \"4\": \"" + String(s_dht2ParticleInfo.humidity) +
+		Particle.publish("thingSpeakWrite_kolu", "{ \"1\": \"" + String(s_dhtParticleInfos[0].temp) +
+											   "\", \"2\": \"" + String(s_dhtParticleInfos[0].temp) + 
+											   "\", \"3\": \"" + String(s_dhtParticleInfos[1].humidity) +
+											   "\", \"4\": \"" + String(s_dhtParticleInfos[1].humidity) +
 											   "\", \"5\": \"" + String(s_relayOn) +
 											   "\", \"k\": \"6JSVCMFGRV4O9OQH\" }", 60, PRIVATE);	
 		s_lastUpdate = timeNow;
@@ -177,16 +122,11 @@ void loop()
 
 	if (Time.second() == 0)
 	{
-		DhtMeasurement dht1Measurement = doMeasurementOf(s_dht1);
-		s_dht1ParticleInfo = convertToParticleInfo(&dht1Measurement);
-		DhtMeasurement dht2Measurement = doMeasurementOf(s_dht2);
-		s_dht2ParticleInfo = convertToParticleInfo(&dht2Measurement);
-		DhtMeasurement dht3Measurement = doMeasurementOf(s_dht3);
-		s_dht3ParticleInfo = convertToParticleInfo(&dht3Measurement);
-		DhtMeasurement dht4Measurement = doMeasurementOf(s_dht4);
-		s_dht4ParticleInfo = convertToParticleInfo(&dht4Measurement);
-		DhtMeasurement dht5Measurement = doMeasurementOf(s_dht5);
-		s_dht5ParticleInfo = convertToParticleInfo(&dht5Measurement);
+		for (int i = 0; i < DHT22_DEVICE_COUNT; i++) {
+			activeDht22DeviceIndex = i;
+			DhtMeasurement m = doMeasurementOf(s_dhtDevices[i]);
+			s_dhtParticleInfos[i] = convertToParticleInfo(&m);
+		}
 	}
 
 	s_uptime = millis() / 1000;
@@ -218,11 +158,10 @@ int ledToggle(String command) {
 
 static void initDevices()
 {
-	s_dht1 = new PietteTech_DHT(DHT1_DATA_PIN, DHT22, dht1_isr);
-	s_dht2 = new PietteTech_DHT(DHT2_DATA_PIN, DHT22, dht2_isr);
-	s_dht3 = new PietteTech_DHT(DHT3_DATA_PIN, DHT22, dht3_isr);
-	s_dht4 = new PietteTech_DHT(DHT4_DATA_PIN, DHT22, dht4_isr);
-	s_dht5 = new PietteTech_DHT(DHT5_DATA_PIN, DHT22, dht5_isr);
+	for (int i = 0; i < DHT22_DEVICE_COUNT; i++) {
+		activeDht22DeviceIndex = i;
+		s_dhtDevices[i] = new PietteTech_DHT(DHT22_PINS[i], DHT22, dht22_isr);
+	}
 }
 
 
@@ -264,7 +203,7 @@ static String dhtResultToString(int result)
 	}
 }
 
-static DhtParticleInfo convertToParticleInfo(DhtMeasurement* measurement)
+static DhtParticleInfo convertToParticleInfo(const DhtMeasurement* measurement)
 {
 	DhtParticleInfo info{};
 

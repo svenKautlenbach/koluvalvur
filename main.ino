@@ -80,8 +80,14 @@ void setup()
 
 	digitalWrite(led1, LOW);
 	digitalWrite(led2, LOW);
+}
 
-	initDevices();
+static void updateMeasurements() {
+	for (int i = 0; i < DHT22_DEVICE_COUNT; i++) {
+		activeDht22DeviceIndex = i;
+		DhtMeasurement m = doMeasurementOf(s_dhtDevices[i]);
+		s_dhtParticleInfos[i] = convertToParticleInfo(&m);
+	}
 }
 
 // Last time, we wanted to continously blink the LED on and off
@@ -105,11 +111,10 @@ void loop()
 	int timeNow = Time.now();
 	if (timeNow - s_lastUpdate >= s_updateIntervalMin * 60)
 	{
-		for (int i = 0; i < DHT22_DEVICE_COUNT; i++) {
-			activeDht22DeviceIndex = i;
-			DhtMeasurement m = doMeasurementOf(s_dhtDevices[i]);
-			s_dhtParticleInfos[i] = convertToParticleInfo(&m);
-		}
+		// This is nuisance, but we want to dynamically respond to new pin assemblies.
+		initDevices();
+		updateMeasurements();
+		freeDht22Devices();
 
 		Particle.publish("thingSpeakWrite_kolu", "{ \"1\": \"" + String(s_dhtParticleInfos[0].temp) +
 											   "\", \"2\": \"" + String(s_dhtParticleInfos[0].temp) + 
@@ -122,11 +127,9 @@ void loop()
 
 	if (Time.second() == 0)
 	{
-		for (int i = 0; i < DHT22_DEVICE_COUNT; i++) {
-			activeDht22DeviceIndex = i;
-			DhtMeasurement m = doMeasurementOf(s_dhtDevices[i]);
-			s_dhtParticleInfos[i] = convertToParticleInfo(&m);
-		}
+		initDevices();
+		updateMeasurements();
+		freeDht22Devices();
 	}
 
 	s_uptime = millis() / 1000;
@@ -164,6 +167,13 @@ static void initDevices()
 	}
 }
 
+static void freeDht22Devices()
+{
+	for (int i = 0; i < DHT22_DEVICE_COUNT; i++) {
+		if (s_dhtDevices[i] != NULL)
+			delete s_dhtDevices[i];
+	}
+}
 
 static DhtMeasurement doMeasurementOf(PietteTech_DHT* device)
 {

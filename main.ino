@@ -22,7 +22,7 @@ const static uint8_t DHT22_PINS[DHT22_DEVICE_COUNT]{D1, D2, D3, D4, D5};
 static PietteTech_DHT* s_dhtDevices[DHT22_DEVICE_COUNT]{NULL, NULL, NULL, NULL, NULL};
 
 static int s_lastUpdate = 0;
-static int s_updateIntervalMin = 1;
+static int s_updateIntervalMin = 15;
 static int s_relayOn = 0;
 
 struct DhtParticleInfo
@@ -125,10 +125,11 @@ void loop()
 		freeDht22Devices();
 
 		Particle.publish("thingSpeakWrite_kolu", "{ \"1\": \"" + String(s_dhtParticleInfos[0].temp) +
-											   "\", \"2\": \"" + String(s_dhtParticleInfos[1].temp) + 
-											   "\", \"3\": \"" + String(s_dhtParticleInfos[0].humidity) +
+											   "\", \"2\": \"" + String(s_dhtParticleInfos[0].humidity) + 
+											   "\", \"3\": \"" + String(s_dhtParticleInfos[1].temp) +
 											   "\", \"4\": \"" + String(s_dhtParticleInfos[2].temp) +
-											   "\", \"5\": \"" + String((int)s_thermocouple_celsius) +
+											   "\", \"5\": \"" + String(s_dhtParticleInfos[3].temp) +
+											   "\", \"6\": \"" + String((int)s_thermocouple_celsius) +
 											   "\", \"k\": \"6JSVCMFGRV4O9OQH\" }", 60, PRIVATE);	
 		s_lastUpdate = timeNow;
 	}
